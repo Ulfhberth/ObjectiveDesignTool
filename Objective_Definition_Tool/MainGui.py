@@ -6,28 +6,51 @@ from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont,  QAction
 from PyQt6.QtCore import Qt, QPoint, QRect
 from objectives import ObjectiveManager
 
-class ObjectiveDialog(QDialog):
-    def __init__(self, parent=None):
+class EditObjectiveDialog(QDialog):
+    def __init__(self, current_name, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("New Objective")
-        self.setGeometry(200, 200, 300, 150)
-        
-        layout = QVBoxLayout()
-        self.label = QLabel("Enter Objective Name:")
-        layout.addWidget(self.label)
-        
-        self.objective_input = QLineEdit()
-        layout.addWidget(self.objective_input)
-        
+        self.setWindowTitle("Edit Objective")
+        self.setGeometry(150, 150, 300, 150)
+
+        self.layout = QVBoxLayout()
+
+        self.label = QLabel("Enter new objective name:")
+        self.layout.addWidget(self.label)
+
+        self.name_input = QLineEdit(self)
+        self.name_input.setText(current_name)  # Zeigt den aktuellen Namen an
+        self.layout.addWidget(self.name_input)
+
+        # Buttons für Bestätigung oder Abbruch
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accept)
-        layout.addWidget(self.ok_button)
-        
-        self.setLayout(layout)
-    
-    def get_objective_name(self):
-        return self.objective_input.text()
+        self.layout.addWidget(self.ok_button)
 
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        self.layout.addWidget(self.cancel_button)
+
+        self.setLayout(self.layout)
+
+    def get_new_name(self):
+        """Gibt den eingegebenen Namen zurück"""
+        return self.name_input.text()
+
+
+class ObjectiveWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Objective Editor")
+        self.setGeometry(100, 100, 400, 250)
+        
+        self.layout = QVBoxLayout()
+        self.label = QLabel("Objective Name: Default Name")
+        self.layout.addWidget(self.label)
+
+        self.container = QWidget()
+        self.container.setLayout(self.layout)
+        self.setCentralWidget(self.container)
+        
 class Canvas(QWidget):
     def __init__(self):
         super().__init__()
@@ -55,7 +78,7 @@ class Canvas(QWidget):
                     print("Rectangle Context Menu Shown")  # Debugging
                     self.showRectangleContextMenu(event.pos())       
                     self.update()  
-                    return  # Verhindert, dass das Kontextmenü erscheint, wenn ein Objekt ausgewählt wurde
+                return  # Verhindert, dass das Kontextmenü erscheint, wenn ein Objekt ausgewählt wurde
 
             # Falls kein Rechteck getroffen wurde
             if self.objective_manager.is_empty():    
@@ -76,11 +99,31 @@ class Canvas(QWidget):
 
         context_menu.exec(self.mapToGlobal(position))
     
+    def open_edit_dialog(self):
+    
+        if self.selected_rect:
+            # Finde das ausgewählte Objekt und dessen Namen
+            for rect, name in self.rectangles:
+                if rect == self.selected_rect:
+                    current_name = name
+                    break
+            else:
+                return  # Falls kein Objekt gefunden wird, abbrechen
+
+            dialog = EditObjectiveDialog(current_name, self)
+            if dialog.exec():  # Falls "OK" geklickt wurde
+                new_name = dialog.get_new_name()
+                
+                # Aktualisiere das Ziel im ObjectiveManager
+                self.objective_manager.update_objective(self.selected_rect.topLeft(), new_name)
+                self.update()
+
+
     def showRectangleContextMenu(self, position):
         context_menu = QMenu(self)
             
         edit_objective_action = QAction("Edit Objective", self)
-        edit_objective_action.triggered.connect(lambda: self.openObjectiveDialog(position))
+        edit_objective_action.triggered.connect(self.open_edit_dialog)
         context_menu.addAction(edit_objective_action)
             
         delete_objective_action = QAction("Delete Objective", self)
@@ -88,7 +131,7 @@ class Canvas(QWidget):
         context_menu.addAction(delete_objective_action)
         
         context_menu.exec(self.mapToGlobal(position))
-    
+
     def openObjectiveDialog(self, position):
         dialog = ObjectiveDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -132,7 +175,6 @@ class Canvas(QWidget):
         return
 
         # Falls außerhalb aller Rechtecke geklickt wurde, Auswahl zurücksetzen
-     
 
 class FullScreenWindow(QMainWindow):
     def __init__(self):
