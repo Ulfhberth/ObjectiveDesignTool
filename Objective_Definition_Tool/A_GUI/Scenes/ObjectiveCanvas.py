@@ -7,6 +7,7 @@ from B_CORE.Entities.objectives.ObjectiveManager import ObjectiveManager
 from B_CORE.Entities.strategies.StrategyManager import StrategyManager
 from B_CORE.Entities.objectives.Objective import ObjectiveItem
 from B_CORE.Entities.strategies.Strategy import StrategyItem
+from B_CORE.Relationship.RelShipManager import RelationshipManager
 
 
 class ObjectiveCanvas(QGraphicsView):
@@ -18,54 +19,65 @@ class ObjectiveCanvas(QGraphicsView):
         self.scale_factor = 1.0
         self.objective_manager = ObjectiveManager()
         self.strategy_manager = StrategyManager()
+        self.relationship_manager = RelationshipManager()
         self.selected_rect = None
         self.drawing = False
         self.start_point = QPointF()
         self.current_rect = QRectF()
 
-    def arrange_items(self, spacing=50):
+    def clear_relationships(self):
+        """Entfernt alle RelationshipItems aus der Szene."""
+        for relationship in self.relationship_manager.list_relationships():
+            self.my_scene.removeItem(relationship)
+        self.relationship_manager.clear()
+  
+    def arrange_items(self, spacing_y=50):
         """
-        Ordnet alle StrategyItems so an, dass ihr gemeinsamer Mittelpunkt unter dem ObjectiveItem liegt.
-        
-        :param spacing: Der horizontale Abstand zwischen den StrategyItems (Standard: 50 Pixel)
+        Ordnet alle Objectives und Strategies zentriert an:
+        - Objective bleibt oben in der Mitte.
+        - Strategies werden mittig unterhalb des Objectives angeordnet.
+        - Relationships (Pfeile) werden nach dem Anordnen neu gezeichnet.
         """
-        # Alle ObjectiveItems in der Szene abrufen (sollte eigentlich nur eines sein)
-        objective_items = [item for item in self.my_scene.items() if isinstance(item, ObjectiveItem)]
+        self.clear_relationships()  # Entferne alte Pfeile
 
-        if not objective_items:
-            print("Kein ObjectiveItem gefunden, Anordnung abgebrochen.")
+        objectives = self.objective_manager.list_objectives()
+        strategies = self.strategy_manager.list_strategies()
+
+        if not objectives or not strategies:
+            print("Keine Objectives oder Strategies vorhanden. Anordnung nicht möglich.")
             return
 
-        # Nehme das erste ObjectiveItem als Referenz
-        objective = objective_items[0]
-        objective_center_x = objective.sceneBoundingRect().center().x()
-        objective_bottom_y = objective.sceneBoundingRect().bottom()
+        # **Schritt 1:** Positioniere das Objective oben zentriert
+        scene_width = self.my_scene.sceneRect().width()
+        objective = objectives[0]  # Erstes Objective als zentrales Element
+        obj_x = (scene_width - objective.boundingRect().width()) / 2
+        obj_y = 50  # Abstand vom oberen Rand
+        objective.setPos(obj_x, obj_y)
 
-        # Alle StrategyItems abrufen
-        strategy_items = [item for item in self.my_scene.items() if isinstance(item, StrategyItem)]
+        # **Schritt 2:** Positioniere alle StrategyItems direkt unter dem Objective
+        total_width = sum(strategy.boundingRect().width() for strategy in strategies) + (len(strategies) - 1) * 20
+        start_x = (scene_width - total_width) / 2  # Zentrierte Startposition
+        strat_y = obj_y + objective.boundingRect().height() + spacing_y
 
-        if not strategy_items:
-            print("Keine StrategyItems gefunden.")
-            return
+        x_offset = start_x
 
-        # Gesamtbreite aller StrategyItems + Abstände berechnen
-        total_width = sum(item.boundingRect().width() for item in strategy_items) + (len(strategy_items) - 1) * spacing
+        for strategy in strategies:
+            strategy.setPos(x_offset, strat_y)
+            x_offset += strategy.boundingRect().width() + 20  # 20px Abstand zwischen Strategies
 
-        # Startposition so setzen, dass die Strategies mittig unter dem Objective erscheinen
-        start_x = objective_center_x - (total_width / 2)
-        y_position = objective_bottom_y + 50  # 50px unter dem Objective
-
-        # StrategyItems anordnen
-        for strategy in strategy_items:
-            strategy.setPos(start_x, y_position)
-            start_x += strategy.boundingRect().width() + spacing  # Nächstes Item rechts positionieren
-
-        print(f"{len(strategy_items)} StrategyItems wurden unter dem Objective angeordnet.")
-
-
+            # **Schritt 3:** Erstelle eine neue Combine Relationship
+            combine_relationship = self.relationship_manager.create_combine_relationship(
+                "Objective-Strategy Relation",
+                "Automatische Verbindung",
+                objective,
+                strategy
+            )
+            self.my_scene.addItem(combine_relationship)
+    
 # --------------------------------------------------------------
 # ---------------- mouse related events ------------------------
 # --------------------------------------------------------------
+
     def wheelEvent(self, event):
         zoom_factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         self.scale(zoom_factor, zoom_factor)
@@ -137,32 +149,24 @@ class ObjectiveCanvas(QGraphicsView):
             # Zentriere die Ansicht auf das neue Ziel
             self.centerOn(new_obj)
 
-    def open_strategy_dialog(self, position):
-        # Erstelle ein Dialogfenster für eine neue Strategie
-        dialog = NewStrategyDialog("New Strategy")
-        
-        # Öffne den Dialog und überprüfe, ob der Benutzer "OK" (Accepted) gedrückt hat
+    def openStrategyDialog(self, position):
+        """
+        Erstellt ein neues StrategyItem und ruft `arrange_items()` auf,
+        um die Struktur und Relationships zu aktualisieren.
+        """
+        if self.objective_manager.is_empty():
+            print("Kein Objective vorhanden. Strategy kann nicht erstellt werden.")
+            return
+
+        dialog = NewStrategyDialog("New Strategy", self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Extrahiere den Namen und die Beschreibung der neuen Strategie aus dem Dialog
             strategy_name, strategy_desc = dialog.get_new_values()
-            
-            # Erstelle ein neues StrategyItem mit vordefinierten Dimensionen (200x100)
-            new_strategy = self.strategy_manager.create_strategy(strategy_name, strategy_desc, 200, 100)
-            
-            # Füge die neue Strategie zur Szene hinzu
+            new_strategy = self.strategy_manager.create_strategy(strategy_name, strategy_desc, 200, 100, self)
             self.my_scene.addItem(new_strategy)
 
-            self.arrange_items()
+            print(f"Neue Strategy erstellt: {new_strategy}")
 
-            # Berechne die horizontale Position, um das Objekt in der Mitte der Szene zu platzieren
-            # center_x = (self.my_scene.sceneRect().width() - new_strategy.rect.width()) / 2 if self.scene() else 0
-            
-            # Setze die berechnete Position für die neue Strategie
-            # new_strategy.setPos(center_x, 300)
-            
-            # Zentriere die Ansicht auf die neue Strategie
-            # self.centerOn(new_strategy)
-
+            self.arrange_items()  # Alle Items neu anordnen & Relationships zeichnen
 
 
     def show_empty_context_menu(self, position):
@@ -176,7 +180,7 @@ class ObjectiveCanvas(QGraphicsView):
 
         # Menüeintrag für das Erstellen einer neuen Strategie
         new_strategy_action = QAction("New Strategy...", self)
-        new_strategy_action.triggered.connect(lambda: self.open_strategy_dialog(position))
+        new_strategy_action.triggered.connect(lambda: self.openStrategyDialog(position))
         context_menu.addAction(new_strategy_action)
 
         context_menu.exec(self.mapToGlobal(position))

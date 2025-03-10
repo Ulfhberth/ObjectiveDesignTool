@@ -11,9 +11,9 @@ class StrategyManager:
         self._id_counter += 1
         return self._id_counter
 
-    def create_strategy(self, name: str, description: str, width: float, height: float) -> StrategyItem:
+    def create_strategy(self, name: str, description: str, width: float, height: float, canvas) -> StrategyItem:
         strategy_id = self._generate_id()
-        strategy = StrategyItem(strategy_id, name, description, width, height)
+        strategy = StrategyItem(strategy_id, name, description, width, height, canvas)
         self._strategies[strategy_id] = strategy
         return strategy
 

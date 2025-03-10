@@ -14,10 +14,11 @@ class Strategy:
 
 
 class StrategyItem(QGraphicsItem):
-    def __init__(self, strategy_id, name, description, width, height):
+    def __init__(self, strategy_id, name, description, width, height, canvas):
         super().__init__()
         self.strategy = Strategy(strategy_id, name, description)
         self.rect = QRectF(0, 0, width, height)
+        self.canvas = canvas
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable |
                       QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
 
@@ -56,3 +57,9 @@ class StrategyItem(QGraphicsItem):
             return "\n".join(lines)
         
         return f"{process_text(name)}\n{process_text(description)}"
+
+    def itemChange(self, change, value):
+        """Löst `arrange_items()` aus, wenn sich das StrategyItem bewegt."""
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            self.canvas.arrange_items()  # Alle Items und Pfeile neu anordnen
+        return super().itemChange(change, value)
