@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QMenu, QDialog, QGraphicsView, QGraphicsScene
-from PyQt6.QtGui import QPainter, QAction
+from PyQt6.QtGui import QPainter, QAction, QPen, QColor
 from PyQt6.QtCore import Qt, QRectF, QPointF
 from A_GUI.Dialogs.NewObjectiveDialog import NewObjectiveDialog
 from A_GUI.Dialogs.NewStrategyDialog import NewStrategyDialog
@@ -21,9 +21,10 @@ class ObjectiveCanvas(QGraphicsView):
         self.strategy_manager = StrategyManager()
         self.relationship_manager = RelationshipManager()
         self.selected_rect = None
-        self.drawing = False
+        self.selecting = False
         self.start_point = QPointF()
         self.current_rect = QRectF()
+        self.selection_rect = QRectF()
 
     def clear_relationships(self):
         """Entfernt alle RelationshipItems aus der Szene."""
@@ -90,7 +91,10 @@ class ObjectiveCanvas(QGraphicsView):
 
         if event.button() == Qt.MouseButton.LeftButton:
             print("Linke Maustaste erkannt - Starte Zeichnungsvorgang")
-            self.start_drawing(scene_position)  # Starte das Zeichnen eines neuen Elements
+            self.selecting = True
+            self.start_point = self.mapToScene(event.pos())
+            self.selection_rect = QRectF(self.start_point, self.start_point)
+            self.viewport().update()
 
         elif event.button() == Qt.MouseButton.RightButton:
             print("Rechte Maustaste erkannt - Kontextmenü prüfen")
@@ -111,14 +115,16 @@ class ObjectiveCanvas(QGraphicsView):
                 self.show_empty_context_menu(view_position)  # Zeige das Standard-Kontextmenü
 
     def mouseMoveEvent(self, event):
-        if self.drawing:
+        if self.selecting:
             end_point = self.mapToScene(event.pos())
-            self.current_rect = QRectF(self.start_point, end_point).normalized()
+            self.selection_rect = QRectF(self.start_point, end_point).normalized()
+            self.viewport().update()
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.drawing:
-            self.drawing = False
-            self.current_rect = QRectF()
+        if event.button() == Qt.MouseButton.LeftButton and self.selecting:
+            self.selecting = False
+            self.selection_rect = QRectF()  # Rahmen zurücksetzen
+            self.viewport().update()
 
 # --------------------------------------------------------------
 # ---------------- contextmenu events --------------------------
@@ -191,5 +197,8 @@ class ObjectiveCanvas(QGraphicsView):
         self.start_point = position
         self.current_rect = QRectF(position, position)
 
-    
+    def drawForeground(self, painter: QPainter, rect: QRectF):
+        if self.selecting:
+            painter.setPen(QPen(QColor(0, 255, 0), 2, Qt.PenStyle.DashLine))
+            painter.drawRect(self.selection_rect)
         

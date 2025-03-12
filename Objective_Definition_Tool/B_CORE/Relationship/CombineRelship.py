@@ -27,11 +27,6 @@ class CombineRelShip:
             f"sourceobjective={self.sourceobjective}, targetstrategies={self.targetstrategies})"
         )
 
-from PyQt6.QtWidgets import QGraphicsPathItem
-from PyQt6.QtGui import QPainter, QPen, QPolygonF, QColor, QPainterPath
-from PyQt6.QtCore import QPointF, Qt
-import math
-
 class CombineRelShipItem(QGraphicsPathItem):
     def __init__(self, rel_id, name, description, sourceobjective, targetstrategy):
         super().__init__()
@@ -49,11 +44,14 @@ class CombineRelShipItem(QGraphicsPathItem):
 
     def update_position(self):
         """Berechnet und zeichnet die rechteckige Pfeil-Verbindung neu."""
-        start_point = self.sourceobjective.sceneBoundingRect().center()
+        start_point = QPointF(
+        self.sourceobjective.sceneBoundingRect().center().x(),  # X-Koordinate bleibt in der Mitte
+        self.sourceobjective.sceneBoundingRect().bottom()       # Y-Koordinate wird auf den unteren Rand gesetzt
+        )
 
         # **Endpunkt leicht über dem oberen Rand des StrategyItem (damit Pfeil sichtbar bleibt)**
         end_rect = self.targetstrategy.sceneBoundingRect()
-        end_point = QPointF(end_rect.center().x(), end_rect.top() - 5)  # 5 Pixel über der oberen Grenze
+        end_point = QPointF(end_rect.center().x(), end_rect.top() - 1)  # 5 Pixel über der oberen Grenze
 
         path = QPainterPath()
         path.moveTo(start_point)
@@ -72,8 +70,8 @@ class CombineRelShipItem(QGraphicsPathItem):
 
     def update_arrow_head(self, end_point):
         """Zeichnet eine sichtbare Pfeilspitze oberhalb des StrategyItems."""
-        arrow_size = 10
-        angle = math.pi / 2  # Pfeil zeigt immer nach unten
+        arrow_size = 10 
+        angle = math.pi*1.5   # Pfeil zeigt immer nach unten
 
         p1 = end_point + QPointF(math.cos(angle + math.pi / 6) * arrow_size,
                                  math.sin(angle + math.pi / 6) * arrow_size)
