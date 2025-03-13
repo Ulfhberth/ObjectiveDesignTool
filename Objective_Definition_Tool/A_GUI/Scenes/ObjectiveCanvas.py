@@ -106,10 +106,20 @@ class ObjectiveCanvas(QGraphicsView):
             if obj.sceneBoundingRect().contains(scene_position)), None
             )
 
+            found_strategy = next(
+            (obj for obj in self.strategy_manager.list_strategies()
+            if obj.sceneBoundingRect().contains(scene_position)), None
+            )
+
             if found_objective:
                 print(f"Objective gefunden: {found_objective}")
                 self.selected_rect = found_objective  # Speichere das gefundene Objective als ausgewählt
                 self.show_new_strategy_context_menu(view_position)  # Zeige das neue Kontextmenü
+            elif found_strategy:
+                print(f"stratgie gefunden: {found_strategy}")
+                self.selected_rect = found_strategy  # Speichere das gefundene Objective als ausgewählt
+                self.show_new_measure_context_menu(view_position)  # Zeige das neue Kontextmenü
+
             else:
                 print("Kein Objective gefunden - Zeige Standard-Kontextmenü")
                 self.show_empty_context_menu(view_position)  # Zeige das Standard-Kontextmenü
@@ -174,7 +184,6 @@ class ObjectiveCanvas(QGraphicsView):
 
             self.arrange_items()  # Alle Items neu anordnen & Relationships zeichnen
 
-
     def show_empty_context_menu(self, position):
         context_menu = QMenu(self)
         context_menu.addAction(QAction("New Objective...", self, triggered=lambda: self.open_objective_dialog(position)))
@@ -186,6 +195,17 @@ class ObjectiveCanvas(QGraphicsView):
 
         # Menüeintrag für das Erstellen einer neuen Strategie
         new_strategy_action = QAction("New Strategy...", self)
+        new_strategy_action.triggered.connect(lambda: self.openStrategyDialog(position))
+        context_menu.addAction(new_strategy_action)
+
+        context_menu.exec(self.mapToGlobal(position))
+
+    def show_new_measure_context_menu(self,position):
+        """Zeigt das Kontextmenü für die Erstellung einer neuen Strategie."""
+        context_menu = QMenu(self)
+
+        # Menüeintrag für das Erstellen einer neuen Maßnahme
+        new_strategy_action = QAction("New measure...", self)
         new_strategy_action.triggered.connect(lambda: self.openStrategyDialog(position))
         context_menu.addAction(new_strategy_action)
 
