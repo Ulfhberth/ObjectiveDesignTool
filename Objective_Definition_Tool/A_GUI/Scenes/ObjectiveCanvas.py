@@ -3,12 +3,11 @@ from PyQt6.QtGui import QPainter, QAction, QPen, QColor
 from PyQt6.QtCore import Qt, QRectF, QPointF
 from A_GUI.Dialogs.NewObjectiveDialog import NewObjectiveDialog
 from A_GUI.Dialogs.NewStrategyDialog import NewStrategyDialog
+from A_GUI.Dialogs.NewMeasureDialog import NewMeasureDialog
 from B_CORE.Entities.objectives.ObjectiveManager import ObjectiveManager
 from B_CORE.Entities.strategies.StrategyManager import StrategyManager
-from B_CORE.Entities.objectives.Objective import ObjectiveItem
-from B_CORE.Entities.strategies.Strategy import StrategyItem
+from B_CORE.Entities.measures.MeasureManager import MeasureManager
 from B_CORE.Relationship.RelShipManager import RelationshipManager
-
 
 class ObjectiveCanvas(QGraphicsView):
     def __init__(self):
@@ -19,6 +18,7 @@ class ObjectiveCanvas(QGraphicsView):
         self.scale_factor = 1.0
         self.objective_manager = ObjectiveManager()
         self.strategy_manager = StrategyManager()
+        self.measure_manager = MeasureManager()
         self.relationship_manager = RelationshipManager()
         self.selected_rect = None
         self.selecting = False
@@ -34,47 +34,61 @@ class ObjectiveCanvas(QGraphicsView):
   
     def arrange_items(self, spacing_y=50):
         """
-        Ordnet alle Objectives und Strategies zentriert an:
+        Ordnet alle Objectives, Strategies und Measures an:
         - Objective bleibt oben in der Mitte.
         - Strategies werden mittig unterhalb des Objectives angeordnet.
+        - Measures werden unterhalb der zugehörigen Strategies platziert.
         - Relationships (Pfeile) werden nach dem Anordnen neu gezeichnet.
         """
-        self.clear_relationships()  # Entferne alte Pfeile
+        self.clear_relationships()
 
         objectives = self.objective_manager.list_objectives()
         strategies = self.strategy_manager.list_strategies()
+        measures = self.measure_manager.list_measures()
 
         if not objectives or not strategies:
             print("Keine Objectives oder Strategies vorhanden. Anordnung nicht möglich.")
             return
 
-        # **Schritt 1:** Positioniere das Objective oben zentriert
+        # Positioniere das Objective oben zentriert
         scene_width = self.my_scene.sceneRect().width()
-        objective = objectives[0]  # Erstes Objective als zentrales Element
+        objective = objectives[0]
         obj_x = (scene_width - objective.boundingRect().width()) / 2
-        obj_y = 50  # Abstand vom oberen Rand
+        obj_y = 50
         objective.setPos(obj_x, obj_y)
 
-        # **Schritt 2:** Positioniere alle StrategyItems direkt unter dem Objective
+        # Positioniere alle StrategyItems unter dem Objective
         total_width = sum(strategy.boundingRect().width() for strategy in strategies) + (len(strategies) - 1) * 20
-        start_x = (scene_width - total_width) / 2  # Zentrierte Startposition
+        start_x = (scene_width - total_width) / 2
         strat_y = obj_y + objective.boundingRect().height() + spacing_y
 
         x_offset = start_x
+        strategy_positions = {}
 
         for strategy in strategies:
             strategy.setPos(x_offset, strat_y)
-            x_offset += strategy.boundingRect().width() + 20  # 20px Abstand zwischen Strategies
+            strategy_positions[strategy.strategy.id] = (x_offset, strat_y + strategy.boundingRect().height() + spacing_y)
+            x_offset += strategy.boundingRect().width() + 20
 
-            # **Schritt 3:** Erstelle eine neue Combine Relationship
             combine_relationship = self.relationship_manager.create_combine_relationship(
-                "Objective-Strategy Relation",
-                "Automatische Verbindung",
-                objective,
-                strategy
+                "Objective-Strategy Relation", "Automatische Verbindung", objective, strategy
             )
             self.my_scene.addItem(combine_relationship)
-    
+
+        # Positioniere die Measures unter den zugehörigen Strategies
+        measure_positions = {}
+        for measure in measures:
+            linked_strategy_id = self.relationship_manager.get_strategy_for_measure(measure)
+            if linked_strategy_id in strategy_positions:
+                measure_x, measure_y = strategy_positions[linked_strategy_id]
+                measure.setPos(measure_x, measure_y)
+                strategy_positions[linked_strategy_id] = (measure_x, measure_y + measure.boundingRect().height() + spacing_y)
+
+                measure_relationship = self.relationship_manager.create_combine_relationship(
+                    "Strategy-Measure Relation", "Automatische Verbindung", self.strategy_manager.get_strategy(linked_strategy_id), measure
+                )
+                self.my_scene.addItem(measure_relationship)
+                
 # --------------------------------------------------------------
 # ---------------- mouse related events ------------------------
 # --------------------------------------------------------------
@@ -189,6 +203,22 @@ class ObjectiveCanvas(QGraphicsView):
         context_menu.addAction(QAction("New Objective...", self, triggered=lambda: self.open_objective_dialog(position)))
         context_menu.exec(self.mapToGlobal(position))
 
+    def open_measure_Dialog(self, position):
+        """
+        Erstellt ein neues MeasureItem und ruft `arrange_items()` auf,
+        um die Struktur und Relationships zu aktualisieren.
+        """
+    
+        dialog = NewMeasureDialog("New Strategy", self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            measure_name, measure_desc = dialog.get_new_values()
+            new_measure = self.measure_manager.create_measure(measure_name, measure_desc, 200, 100)
+            self.my_scene.addItem(new_measure)
+
+            print(f"Neue Maßnahme erstellt: {new_measure}")
+
+            self.arrange_items()  # Alle Items neu anordnen & Relationships zeichnen
+
     def show_new_strategy_context_menu(self, position):
         """Zeigt das Kontextmenü für die Erstellung einer neuen Strategie."""
         context_menu = QMenu(self)
@@ -206,7 +236,7 @@ class ObjectiveCanvas(QGraphicsView):
 
         # Menüeintrag für das Erstellen einer neuen Maßnahme
         new_strategy_action = QAction("New measure...", self)
-        new_strategy_action.triggered.connect(lambda: self.openStrategyDialog(position))
+        new_strategy_action.triggered.connect(lambda: self.open_measure_Dialog(position))
         context_menu.addAction(new_strategy_action)
 
         context_menu.exec(self.mapToGlobal(position))

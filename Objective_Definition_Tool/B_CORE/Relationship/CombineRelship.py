@@ -1,9 +1,12 @@
-from typing import List
-from B_CORE.Entities.objectives.Objective import ObjectiveItem
-from B_CORE.Entities.strategies.Strategy import StrategyItem
+from typing import List, Union
 from PyQt6.QtWidgets import QGraphicsPathItem
 from PyQt6.QtGui import QPainter, QPen, QPolygonF, QColor, QPainterPath
-from PyQt6.QtCore import QLineF, QPointF, Qt
+from PyQt6.QtCore import QPointF, Qt
+from B_CORE.Entities.objectives.Objective import ObjectiveItem
+from B_CORE.Entities.strategies.Strategy import StrategyItem
+from B_CORE.Entities.measures.Measure import MeasureItem
+
+
 import math
 
 class CombineRelShip:
@@ -12,29 +15,46 @@ class CombineRelShip:
         rel_id: int,
         name: str,
         description: str,
-        sourceobjective: ObjectiveItem,
-        targetstrategies: List[StrategyItem]
+        source: Union["ObjectiveItem", "StrategyItem"],
+        targets: List[Union["StrategyItem", "MeasureItem"]]
     ):
+        """
+        Generalisierte Klasse für Beziehungen zwischen verschiedenen Entitäten.
+
+        :param rel_id: ID der Beziehung
+        :param name: Name der Beziehung
+        :param description: Beschreibung der Beziehung
+        :param source: Quelle der Beziehung (z.B. ObjectiveItem oder StrategyItem)
+        :param targets: Liste der Ziele (z.B. StrategyItem oder MeasureItem)
+        """
         self.id = rel_id
         self.name = name
         self.description = description
-        self.sourceobjective = sourceobjective
-        self.targetstrategies = targetstrategies
+        self.source = source
+        self.targets = targets
+
+    def update_source(self, new_source):
+        """Dynamisches Aktualisieren der Quelle."""
+        self.source = new_source
+
+    def update_targets(self, new_targets):
+        """Dynamisches Aktualisieren der Ziele."""
+        self.targets = new_targets
 
     def __repr__(self):
         return (
             f"CombineRelShip(id={self.id}, name='{self.name}', description='{self.description}', "
-            f"sourceobjective={self.sourceobjective}, targetstrategies={self.targetstrategies})"
+            f"source={self.source}, targets={self.targets})"
         )
 
 class CombineRelShipItem(QGraphicsPathItem):
-    def __init__(self, rel_id, name, description, sourceobjective, targetstrategy):
+    def __init__(self, rel_id, name, description, source, target):
         super().__init__()
         self.rel_id = rel_id
         self.name = name
         self.description = description
-        self.sourceobjective = sourceobjective  # Startpunkt (ObjectiveItem)
-        self.targetstrategy = targetstrategy  # Endpunkt (StrategyItem)
+        self.source = source
+        self.target = target
         self.setZValue(1)  # Zeichne über anderen Elementen
 
         # Weiße Linie mit rechteckigen Ecken
@@ -42,36 +62,45 @@ class CombineRelShipItem(QGraphicsPathItem):
 
         self.update_position()
 
+    def update_source(self, new_source):
+        """Dynamische Aktualisierung der Quelle."""
+        self.source = new_source
+        self.update_position()
+
+    def update_target(self, new_target):
+        """Dynamische Aktualisierung des Ziels."""
+        self.target = new_target
+        self.update_position()
+
     def update_position(self):
         """Berechnet und zeichnet die rechteckige Pfeil-Verbindung neu."""
+        if not self.source or not self.target:
+            return
+
         start_point = QPointF(
-        self.sourceobjective.sceneBoundingRect().center().x(),  # X-Koordinate bleibt in der Mitte
-        self.sourceobjective.sceneBoundingRect().bottom()       # Y-Koordinate wird auf den unteren Rand gesetzt
+            self.source.sceneBoundingRect().center().x(),
+            self.source.sceneBoundingRect().bottom()
         )
 
-        # **Endpunkt leicht über dem oberen Rand des StrategyItem (damit Pfeil sichtbar bleibt)**
-        end_rect = self.targetstrategy.sceneBoundingRect()
-        end_point = QPointF(end_rect.center().x(), end_rect.top() - 1)  # 5 Pixel über der oberen Grenze
+        end_rect = self.target.sceneBoundingRect()
+        end_point = QPointF(end_rect.center().x(), end_rect.top() - 1)
 
         path = QPainterPath()
         path.moveTo(start_point)
 
-        # **Rechteckige Linienführung**
         mid_x = start_point.x()
-        mid_y = (start_point.y() + end_point.y()) / 2  # Mittelpunkt vertikal
-        path.lineTo(mid_x, mid_y)  # Senkrecht nach unten
-        path.lineTo(end_point.x(), mid_y)  # Horizontal zum Zielpunkt
-        path.lineTo(end_point)  # Senkrecht zum oberen Rand des StrategyItem (leicht darüber)
+        mid_y = (start_point.y() + end_point.y()) / 2
+        path.lineTo(mid_x, mid_y)
+        path.lineTo(end_point.x(), mid_y)
+        path.lineTo(end_point)
 
         self.setPath(path)
-
-        # **Pfeilspitze berechnen**
         self.update_arrow_head(end_point)
 
     def update_arrow_head(self, end_point):
-        """Zeichnet eine sichtbare Pfeilspitze oberhalb des StrategyItems."""
-        arrow_size = 10 
-        angle = math.pi*1.5   # Pfeil zeigt immer nach unten
+        """Zeichnet eine sichtbare Pfeilspitze oberhalb des Ziels."""
+        arrow_size = 10
+        angle = math.pi * 1.5  # Pfeil zeigt nach unten
 
         p1 = end_point + QPointF(math.cos(angle + math.pi / 6) * arrow_size,
                                  math.sin(angle + math.pi / 6) * arrow_size)
@@ -85,5 +114,5 @@ class CombineRelShipItem(QGraphicsPathItem):
         painter.setPen(self.pen())
         painter.drawPath(self.path())
 
-        painter.setBrush(QColor(255, 255, 255))  # Weiße Pfeilspitze
+        painter.setBrush(QColor(255, 255, 255))
         painter.drawPolygon(self.arrow_head)

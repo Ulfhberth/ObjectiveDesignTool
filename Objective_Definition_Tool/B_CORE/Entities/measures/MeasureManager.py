@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-from CORE.Entities.measures.Measure import MeasureItem
+from B_CORE.Entities.measures.Measure import MeasureItem
 
 
 class MeasureManager:
