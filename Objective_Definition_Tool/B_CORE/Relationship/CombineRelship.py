@@ -58,9 +58,9 @@ class CombineRelShipItem(QGraphicsPathItem):
         self.setZValue(1)  # Zeichne über anderen Elementen
 
         # Weiße Linie mit rechteckigen Ecken
-        self.setPen(QPen(QColor(255, 255, 255), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap, Qt.PenJoinStyle.MiterJoin))
+        #self.setPen(QPen(QColor(255, 255, 255), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap, Qt.PenJoinStyle.MiterJoin))
 
-        self.update_position()
+        #self.update_position()
 
     def update_source(self, new_source):
         """Dynamische Aktualisierung der Quelle."""

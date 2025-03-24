@@ -30,7 +30,7 @@ class ObjectiveCanvas(QGraphicsView):
         """Entfernt alle RelationshipItems aus der Szene."""
         for relationship in self.relationship_manager.list_relationships():
             self.my_scene.removeItem(relationship)
-        self.relationship_manager.clear()
+        #self.relationship_manager.clear()
     
     def arrange_items(self, spacing_y=50):
         """
@@ -40,6 +40,7 @@ class ObjectiveCanvas(QGraphicsView):
         - Measures darunter basierend auf Strategy→Measure-Relationships
         - Beziehungen werden entsprechend neu gezeichnet
         """
+             
         objectives = self.objective_manager.list_objectives()
         if not objectives:
             print("Kein Objective vorhanden.")
@@ -54,12 +55,11 @@ class ObjectiveCanvas(QGraphicsView):
 
         # Alle aktuellen Beziehungen holen
         all_relationships = self.relationship_manager.list_relationships()
-
+        print(len(all_relationships))
         # Step 1: Strategies finden, die mit diesem Objective verbunden sind
         strategy_relationships = [
             rel for rel in all_relationships
-            if hasattr(rel.source, "objective") and rel.source.objective.id == objective.objective.id
-        ]
+            if hasattr(rel.source, "objective") and rel.source.objective.id == objective.objective.id]
         strategies = [rel.target for rel in strategy_relationships]
 
         # Strategies positionieren
@@ -77,17 +77,8 @@ class ObjectiveCanvas(QGraphicsView):
                 strat_y + strategy.boundingRect().height() + spacing_y
             )
 
-            # Beziehung erneut zur Szene hinzufügen
-            rel = self.relationship_manager.create_combine_relationship(
-                "Objective-Strategy Relation",
-                "Automatisch generierte Verbindung",
-                objective,
-                strategy
-            )
-            self.my_scene.addItem(rel)
-
             x_offset += strategy.boundingRect().width() + 20
-
+       
         # Step 2: Measures positionieren unter zugehörigen Strategies
         for rel in all_relationships:
             if hasattr(rel.source, "strategy") and hasattr(rel.target, "measure"):
@@ -103,14 +94,55 @@ class ObjectiveCanvas(QGraphicsView):
                         measure_y + measure.boundingRect().height() + spacing_y
                     )
 
-                    # Beziehung erneut hinzufügen
-                    rel = self.relationship_manager.create_combine_relationship(
-                        "Strategy-Measure Relation",
-                        "Automatisch generierte Verbindung",
-                        rel.source,
-                        measure
-                    )
-                    self.my_scene.addItem(rel)
+
+        # Gruppiere Measures nach zugehöriger Strategy
+        measures_by_strategy = {}
+        for measure in measures:
+            linked_strategy_id = self.relationship_manager.get_strategy_for_measure(measure)
+            if linked_strategy_id not in measures_by_strategy:
+                measures_by_strategy[linked_strategy_id] = []
+            measures_by_strategy[linked_strategy_id].append(measure)
+
+        # Positioniere Measures zentriert unter jeder Strategy
+        for strat_id, measure_list in measures_by_strategy.items():
+            if strat_id not in strategy_positions:
+                continue
+
+            # Strategieposition ermitteln
+            base_x, base_y = strategy_positions[strat_id]
+
+            # Gesamtbreite aller Measures + Abstände berechnen
+            total_width = sum(m.boundingRect().width() for m in measure_list) + (len(measure_list) - 1) * 20
+            start_x = base_x + (strategy.boundingRect().width() - total_width) / 2  # zentriert unter Strategy
+
+            # Measures platzieren
+            x_offset = start_x
+            for measure in measure_list:
+                measure.setPos(x_offset, base_y)
+                x_offset += measure.boundingRect().width() + 20
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        for rel in all_relationships:
+            print('starte update for: {rel}' )
+            rel.update_position()
 
 # --------------------------------------------------------------
 # ---------------- mouse related events ------------------------
@@ -217,7 +249,7 @@ class ObjectiveCanvas(QGraphicsView):
             self.my_scene.addItem(new_strategy)
 
             # Verknüpfung mit dem ersten vorhandenen Objective
-            objective = self.objective_manager.list_objectives()[0]
+            objective = self.selected_rect
             relationship = self.relationship_manager.create_combine_relationship(
                 "Objective-Strategy Relation",
                 "Erstellt beim Hinzufügen einer neuen Strategy",
