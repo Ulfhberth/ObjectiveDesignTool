@@ -37,10 +37,11 @@ class ObjectiveCanvas(QGraphicsView):
         Ordnet die Items gemäß CombineRelShipItems:
         - Objective zentriert oben
         - Strategies darunter basierend auf Objective→Strategy-Relationships
-        - Measures darunter basierend auf Strategy→Measure-Relationships
+        - Measures darunter zentriert unter der jeweiligen Strategy (horizontal verteilt)
+        - Measures kollidieren nicht – globaler Abstand
         - Beziehungen werden entsprechend neu gezeichnet
         """
-             
+
         objectives = self.objective_manager.list_objectives()
         if not objectives:
             print("Kein Objective vorhanden.")
@@ -56,10 +57,12 @@ class ObjectiveCanvas(QGraphicsView):
         # Alle aktuellen Beziehungen holen
         all_relationships = self.relationship_manager.list_relationships()
         print(len(all_relationships))
+
         # Step 1: Strategies finden, die mit diesem Objective verbunden sind
         strategy_relationships = [
             rel for rel in all_relationships
-            if hasattr(rel.source, "objective") and rel.source.objective.id == objective.objective.id]
+            if hasattr(rel.source, "objective") and rel.source.objective.id == objective.objective.id
+        ]
         strategies = [rel.target for rel in strategy_relationships]
 
         # Strategies positionieren
@@ -73,76 +76,85 @@ class ObjectiveCanvas(QGraphicsView):
         for strategy in strategies:
             strategy.setPos(x_offset, strat_y)
             strategy_positions[strategy.strategy.id] = (
+                strategy,
                 x_offset,
                 strat_y + strategy.boundingRect().height() + spacing_y
             )
-
             x_offset += strategy.boundingRect().width() + 20
-       
-        # Step 2: Measures positionieren unter zugehörigen Strategies
+
+        # Measures zur Szene hinzufügen, falls noch nicht vorhanden
         for rel in all_relationships:
-            if hasattr(rel.source, "strategy") and hasattr(rel.target, "measure"):
-                strategy_id = rel.source.strategy.id
-                if strategy_id in strategy_positions:
-                    measure = rel.target
-                    measure_x, measure_y = strategy_positions[strategy_id]
-                    measure.setPos(measure_x, measure_y)
+            if hasattr(rel.target, "measure") and rel.target.scene() is None:
+                self.my_scene.addItem(rel.target)
 
-                    # Platz aktualisieren, falls weitere Measures folgen
-                    strategy_positions[strategy_id] = (
-                        measure_x,
-                        measure_y + measure.boundingRect().height() + spacing_y
-                    )
+        # Globale Liste platzierter Measures
+        globally_placed_measures = []
 
-
-        # Gruppiere Measures nach zugehöriger Strategy
-        measures_by_strategy = {}
-        for measure in measures:
-            linked_strategy_id = self.relationship_manager.get_strategy_for_measure(measure)
-            if linked_strategy_id not in measures_by_strategy:
-                measures_by_strategy[linked_strategy_id] = []
-            measures_by_strategy[linked_strategy_id].append(measure)
-
-        # Positioniere Measures zentriert unter jeder Strategy
-        for strat_id, measure_list in measures_by_strategy.items():
-            if strat_id not in strategy_positions:
+        # Measures unter zugehörigen Strategies zentriert und kollisionsfrei platzieren
+        for strategy_id, (strategy, base_x, measure_y) in strategy_positions.items():
+            # Alle zugehörigen Measures zur Strategy finden
+            measure_relationships = [
+                rel for rel in all_relationships
+                if hasattr(rel.source, "strategy")
+                and rel.source.strategy.id == strategy_id
+                and hasattr(rel.target, "measure")
+            ]
+            measures = [rel.target for rel in measure_relationships]
+            if not measures:
                 continue
 
-            # Strategieposition ermitteln
-            base_x, base_y = strategy_positions[strat_id]
-
-            # Gesamtbreite aller Measures + Abstände berechnen
-            total_width = sum(m.boundingRect().width() for m in measure_list) + (len(measure_list) - 1) * 20
-            start_x = base_x + (strategy.boundingRect().width() - total_width) / 2  # zentriert unter Strategy
-
-            # Measures platzieren
+            total_width = sum(m.boundingRect().width() for m in measures) + (len(measures) - 1) * 20
+            start_x = strategy.sceneBoundingRect().center().x() - total_width / 2
             x_offset = start_x
-            for measure in measure_list:
-                measure.setPos(x_offset, base_y)
+
+            for measure in measures:
+                measure.setPos(x_offset, measure_y)
+
+                # Kollisionsprüfung mit allen anderen Measures
+                while any(measure.collidesWithItem(other) for other in globally_placed_measures):
+                    x_offset += measure.boundingRect().width() + 50
+                    measure.setPos(x_offset, measure_y)
+
+                globally_placed_measures.append(measure)
                 x_offset += measure.boundingRect().width() + 20
 
+        # Step: Strategies neu zentrieren über ihren Measures
+        for strategy_id, (strategy, _, measure_y) in strategy_positions.items():
+            related_measures = [
+                rel.target for rel in all_relationships
+                if hasattr(rel.source, "strategy")
+                and rel.source.strategy.id == strategy_id
+                and hasattr(rel.target, "measure")
+            ]
+            if not related_measures:
+                continue
 
+            left = min(m.sceneBoundingRect().left() for m in related_measures)
+            right = max(m.sceneBoundingRect().right() for m in related_measures)
+            center_x = (left + right) / 2
+            strategy_x = center_x - strategy.boundingRect().width() / 2
 
+            # Y bleibt gleich
+            strategy_y = strategy.scenePos().y()
+            strategy.setPos(strategy_x, strategy_y)
+        
+         # Step: Objective zentrieren über allen Strategies
+        if strategies:
+            left = min(s.sceneBoundingRect().left() for s in strategies)
+            right = max(s.sceneBoundingRect().right() for s in strategies)
+            center_x = (left + right) / 2
+            objective_x = center_x - objective.boundingRect().width() / 2
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            # Y bleibt wie gehabt
+            objective_y = objective.scenePos().y()
+            objective.setPos(objective_x, objective_y)
+        
+        # Alle Relationships neu zeichnen
         for rel in all_relationships:
-            print('starte update for: {rel}' )
+            print(f"starte update for: {rel}")
             rel.update_position()
+
+
 
 # --------------------------------------------------------------
 # ---------------- mouse related events ------------------------
@@ -234,7 +246,7 @@ class ObjectiveCanvas(QGraphicsView):
             # Zentriere die Ansicht auf das neue Ziel
             self.centerOn(new_obj)
 
-    def openStrategyDialog(self, position):
+    def open_strategy_dialog(self, position):
         """
         Erstellt ein neues StrategyItem und verknüpft es direkt mit dem vorhandenen Objective.
         """
@@ -261,7 +273,8 @@ class ObjectiveCanvas(QGraphicsView):
             print(f"Neue Strategy erstellt und verknüpft: {new_strategy}")
             self.arrange_items()
 
-    def show_empty_context_menu(self, position):
+    def show_empty_context_menu(self, position
+                                 ):
         context_menu = QMenu(self)
         context_menu.addAction(QAction("New Objective...", self, triggered=lambda: self.open_objective_dialog(position)))
         context_menu.exec(self.mapToGlobal(position))
@@ -301,7 +314,7 @@ class ObjectiveCanvas(QGraphicsView):
 
         # Menüeintrag für das Erstellen einer neuen Strategie
         new_strategy_action = QAction("New Strategy...", self)
-        new_strategy_action.triggered.connect(lambda: self.openStrategyDialog(position))
+        new_strategy_action.triggered.connect(lambda: self.open_strategy_dialog(position))
         context_menu.addAction(new_strategy_action)
 
         context_menu.exec(self.mapToGlobal(position))
